@@ -1,0 +1,6 @@
+{
+  "name": "SI-SERTIF UPNVJ",
+  "description": "Sistem Informasi Sertifikat UPN Veteran Jakarta untuk menyimpan, mengelola, dan mengelompokkan sertifikat mahasiswa serta memantau kelengkapan syarat wajib skripsi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
