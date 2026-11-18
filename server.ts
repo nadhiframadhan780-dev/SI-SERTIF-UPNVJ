@@ -89,34 +89,67 @@ async function startServer() {
 
       parts.push({ text: contextText });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: { parts },
-        config: {
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.LOW,
-          },
-          systemInstruction: instruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              namaSertifikat: {
-                type: Type.STRING,
-                description: 'Nama resmi sertifikat atau kegiatan.',
+      const maxAttempts = 2;
+      let response;
+      let lastError: unknown;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          response = await ai.models.generateContent({
+            model: 'gemini-4-hydrogen',
+            contents: { parts },
+            config: {
+              thinkingConfig: {
+                thinkingLevel: ThinkingLevel.LOW,
               },
-              deskripsi: {
-                type: Type.STRING,
-                description:
-                  'Deskripsi singkat 1-3 kalimat mengenai kegiatan, penyelenggara, dan penerima sertifikat.',
+              systemInstruction: instruction,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  namaSertifikat: {
+                    type: Type.STRING,
+                    description: 'Nama resmi sertifikat atau kegiatan.',
+                  },
+                  deskripsi: {
+                    type: Type.STRING,
+                    description:
+                      'Deskripsi singkat 1-3 kalimat mengenai kegiatan, penyelenggara, dan penerima sertifikat.',
+                  },
+                },
+                required: ['namaSertifikat', 'deskripsi'],
               },
             },
-            required: ['namaSertifikat', 'deskripsi'],
-          },
-        },
-      });
+          });
+          break;
+        } catch (err) {
+          lastError = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          const isTransient =
+            msg.includes('429') ||
+            msg.includes('503') ||
+            msg.includes('UNAVAILABLE') ||
+            msg.includes('RESOURCE_EXHAUSTED') ||
+            msg.includes('ECONNRESET') ||
+            msg.includes('ETIMEDOUT');
+          if (attempt < maxAttempts && isTransient) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          throw err;
+        }
+      }
 
-      const rawText = (response.text || '').trim();
+      if (!response) {
+        throw lastError ?? new Error('No response from Gemini API');
+      }
+
+      const rawText = (response.text || '')
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
       if (!rawText) {
         res.status(502).json({
           error: 'Respons AI kosong saat membaca sertifikat.',
@@ -135,7 +168,35 @@ async function startServer() {
         deskripsi: (parsed.deskripsi || '').trim(),
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error('Certificate extraction error:', error);
+
+      if (
+        message.includes('API_KEY_INVALID') ||
+        message.includes('PERMISSION_DENIED') ||
+        message.includes('API key not valid') ||
+        message.includes('403')
+      ) {
+        res.status(401).json({
+          error:
+            'Kunci API Gemini tidak valid atau belum memiliki izin. Periksa GEMINI_API_KEY di Settings > Secrets atau file .env server.',
+          code: 'API_KEY_INVALID',
+        });
+        return;
+      }
+
+      if (
+        message.includes('RESOURCE_EXHAUSTED') ||
+        message.includes('429')
+      ) {
+        res.status(429).json({
+          error:
+            'Kuota permintaan AI sementara penuh. Tunggu sebentar lalu coba unggah ulang, atau isi detail secara manual.',
+          code: 'RATE_LIMITED',
+        });
+        return;
+      }
+
       res.status(500).json({
         error: 'Gagal mengekstrak metadata sertifikat melalui AI.',
         code: 'EXTRACTION_FAILED',

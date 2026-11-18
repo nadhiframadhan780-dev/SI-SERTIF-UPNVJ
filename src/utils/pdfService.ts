@@ -51,7 +51,10 @@ export async function extractPdfContentForAi(
   // If PDF is scanned (very little or no selectable text), render first page as JPEG image
   if (extractedText.length < 25) {
     const firstPage = await pdf.getPage(1);
-    const viewport = firstPage.getViewport({ scale: 1.5 });
+    const baseViewport = firstPage.getViewport({ scale: 1 });
+    const maxDimension = Math.max(baseViewport.width, baseViewport.height) || 1;
+    const clampedScale = Math.min(1.5, Math.max(0.5, 1400 / maxDimension));
+    const viewport = firstPage.getViewport({ scale: clampedScale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
@@ -65,7 +68,7 @@ export async function extractPdfContentForAi(
         canvas,
         viewport,
       }).promise;
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       const imageBase64 = dataUrl.split(',')[1] || '';
       return {
         extractedText,
@@ -107,9 +110,14 @@ export async function analyzeCertificatePdf(
     const onExternalAbort = () => controller.abort();
     externalSignal?.addEventListener('abort', onExternalAbort);
 
+    const apiBase = (
+      (import.meta as ImportMeta & { env?: Record<string, string | undefined> })
+        .env?.VITE_API_BASE_URL || ''
+    ).replace(/\/$/, '');
+
     let response: Response;
     try {
-      response = await fetch('/api/extract-certificate', {
+      response = await fetch(`${apiBase}/api/extract-certificate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,13 +139,27 @@ export async function analyzeCertificatePdf(
       const errData = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
+      let fallbackMessage = errData.error;
+      if (!fallbackMessage) {
+        if (response.status === 413) {
+          fallbackMessage =
+            'Ukuran gambar pindaian terlalu besar untuk diproses AI. Nama sertifikat diisi dari nama file.';
+        } else if (response.status === 504) {
+          fallbackMessage =
+            'Waktu tunggu layanan AI habis. Nama sertifikat diisi dari nama file.';
+        } else if (response.status === 404 || response.status === 405) {
+          fallbackMessage =
+            'Server AI tidak tersedia di mode statis/offline ini. Nama sertifikat diisi dari nama file.';
+        } else {
+          fallbackMessage =
+            'Pengisian otomatis AI gagal. Nama sertifikat diisi dari nama file.';
+        }
+      }
       return {
         namaSertifikat: fallbackTitle,
         deskripsi: '',
         isFallback: true,
-        message:
-          errData.error ||
-          'Pengisian otomatis AI gagal. Nama sertifikat diisi dari nama file.',
+        message: fallbackMessage,
       };
     }
 
