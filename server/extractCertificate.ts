@@ -83,10 +83,41 @@ export async function extractCertificateFromPayload(
     }
 
     const contextText = extractedText
-      ? `Berikut teks yang diekstrak dari PDF sertifikat (nama file: "${fileName}"):\n\n${extractedText.slice(0, 12000)}`
-      : `Dokumen ini merupakan sertifikat hasil pindai (gambar halaman pertama terlampir). Nama file asli: "${fileName}". Mohon baca teks di gambar sertifikat ini dengan cermat.`;
+      ? `Teks PDF sertifikat (file: "${fileName}"):\n${extractedText.slice(0, 4500)}`
+      : `Sertifikat hasil pindai (gambar halaman 1 terlampir, file: "${fileName}"). Baca teks di gambar dengan cermat.`;
 
     parts.push({ text: contextText });
+
+    const callModel = async (
+      model: 'gemini-3.1-flash-lite' | 'gemini-4-hydrogen',
+      thinkingLevel: ThinkingLevel
+    ) =>
+      ai.models.generateContent({
+        model,
+        contents: { parts },
+        config: {
+          thinkingConfig: {
+            thinkingLevel,
+          },
+          systemInstruction: instruction,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              namaSertifikat: {
+                type: Type.STRING,
+                description: 'Nama resmi sertifikat atau kegiatan.',
+              },
+              deskripsi: {
+                type: Type.STRING,
+                description:
+                  'Deskripsi singkat 1-3 kalimat mengenai kegiatan, penyelenggara, dan penerima sertifikat.',
+              },
+            },
+            required: ['namaSertifikat', 'deskripsi'],
+          },
+        },
+      });
 
     const maxAttempts = 2;
     let response;
@@ -94,32 +125,25 @@ export async function extractCertificateFromPayload(
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        response = await ai.models.generateContent({
-          model: 'gemini-4-hydrogen',
-          contents: { parts },
-          config: {
-            thinkingConfig: {
-              thinkingLevel: ThinkingLevel.LOW,
-            },
-            systemInstruction: instruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                namaSertifikat: {
-                  type: Type.STRING,
-                  description: 'Nama resmi sertifikat atau kegiatan.',
-                },
-                deskripsi: {
-                  type: Type.STRING,
-                  description:
-                    'Deskripsi singkat 1-3 kalimat mengenai kegiatan, penyelenggara, dan penerima sertifikat.',
-                },
-              },
-              required: ['namaSertifikat', 'deskripsi'],
-            },
-          },
-        });
+        try {
+          response = await callModel(
+            'gemini-3.1-flash-lite',
+            ThinkingLevel.MINIMAL
+          );
+        } catch (primaryErr) {
+          const primaryMsg =
+            primaryErr instanceof Error
+              ? primaryErr.message
+              : String(primaryErr);
+          if (
+            primaryMsg.includes('NOT_FOUND') ||
+            primaryMsg.includes('404')
+          ) {
+            response = await callModel('gemini-4-hydrogen', ThinkingLevel.LOW);
+          } else {
+            throw primaryErr;
+          }
+        }
         break;
       } catch (err) {
         lastError = err;

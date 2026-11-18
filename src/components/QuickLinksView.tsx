@@ -3,15 +3,27 @@ import {
   ArrowUpRight,
   BookOpen,
   Building2,
+  CalendarClock,
+  CalendarDays,
+  ClipboardList,
   GraduationCap,
 } from 'lucide-react';
 
-type PortalKey = 'leads' | 'siakad' | 'website';
+type PortalKey =
+  | 'leads'
+  | 'siakad'
+  | 'website'
+  | 'jadwal'
+  | 'kalender'
+  | 'planner';
 
 const PORTAL_URLS: Record<PortalKey, string> = {
   leads: 'https://leads.upnvj.ac.id/login/index.php',
   siakad: 'https://akademik.upnvj.ac.id/',
   website: 'https://www.upnvj.ac.id/',
+  jadwal: 'https://jadwal-mata-kuliah-akuntansi-s1-upn.vercel.app/',
+  kalender: 'https://kalender-upnvj-2026-2027.vercel.app/',
+  planner: 'https://tugas-kuliah-akuntansi-upnvj-eight.vercel.app/',
 };
 
 const QUICK_LINKS: Array<{
@@ -42,6 +54,27 @@ const QUICK_LINKS: Array<{
     accentBg: 'bg-amber-50 group-hover:bg-yellow-500',
     accentText: 'text-amber-700 group-hover:text-slate-900',
   },
+  {
+    key: 'jadwal',
+    label: 'Jadwal Kuliah S1 Akuntansi',
+    Icon: CalendarClock,
+    accentBg: 'bg-teal-50 group-hover:bg-teal-600',
+    accentText: 'text-teal-700 group-hover:text-white',
+  },
+  {
+    key: 'kalender',
+    label: 'Kalender UPNVJ 2026/2027',
+    Icon: CalendarDays,
+    accentBg: 'bg-emerald-50 group-hover:bg-emerald-600',
+    accentText: 'text-emerald-700 group-hover:text-white',
+  },
+  {
+    key: 'planner',
+    label: 'Planner Mhs Akuntansi',
+    Icon: ClipboardList,
+    accentBg: 'bg-amber-50 group-hover:bg-yellow-500',
+    accentText: 'text-amber-700 group-hover:text-slate-900',
+  },
 ];
 
 export const QuickLinksView: React.FC = () => {
@@ -57,12 +90,12 @@ export const QuickLinksView: React.FC = () => {
           Telusuri Cepat
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Akses cepat portal akademik resmi UPN Veteran Jakarta melalui tab
-          baru.
+          Akses cepat portal akademik dan perangkat penunjang perkuliahan UPN
+          Veteran Jakarta melalui tab baru.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {QUICK_LINKS.map(({ key, label, Icon, accentBg, accentText }) => (
           <button
             key={key}
@@ -70,13 +103,13 @@ export const QuickLinksView: React.FC = () => {
             onClick={() => openPortal(key)}
             className="group flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md focus-visible:outline-2 focus-visible:outline-teal-600"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 min-w-0">
               <div
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-colors ${accentBg} ${accentText}`}
               >
                 <Icon className="h-6 w-6" aria-hidden="true" />
               </div>
-              <span className="text-base font-bold text-slate-900">
+              <span className="text-base font-bold text-slate-900 leading-snug">
                 {label}
               </span>
             </div>

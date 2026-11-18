@@ -30,7 +30,7 @@ export async function extractPdfContentForAi(
 ): Promise<PdfExtractionResult> {
   const pdf = await loadPdfDocument(blob);
   const numPages = pdf.numPages;
-  const maxPagesToRead = Math.min(numPages, 3);
+  const maxPagesToRead = Math.min(numPages, 2);
   const textChunks: string[] = [];
 
   for (let pageNum = 1; pageNum <= maxPagesToRead; pageNum++) {
@@ -48,12 +48,12 @@ export async function extractPdfContentForAi(
 
   const extractedText = textChunks.join('\n').trim();
 
-  // If PDF is scanned (very little or no selectable text), render first page as JPEG image
+  // If PDF is scanned (very little or no selectable text), render first page as compact JPEG image
   if (extractedText.length < 25) {
     const firstPage = await pdf.getPage(1);
     const baseViewport = firstPage.getViewport({ scale: 1 });
     const maxDimension = Math.max(baseViewport.width, baseViewport.height) || 1;
-    const clampedScale = Math.min(1.5, Math.max(0.5, 1400 / maxDimension));
+    const clampedScale = Math.min(1.35, Math.max(0.5, 1024 / maxDimension));
     const viewport = firstPage.getViewport({ scale: clampedScale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(viewport.width);
@@ -68,7 +68,7 @@ export async function extractPdfContentForAi(
         canvas,
         viewport,
       }).promise;
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
       const imageBase64 = dataUrl.split(',')[1] || '';
       return {
         extractedText,
@@ -110,10 +110,15 @@ export async function analyzeCertificatePdf(
     const onExternalAbort = () => controller.abort();
     externalSignal?.addEventListener('abort', onExternalAbort);
 
-    const apiBase = (
-      (import.meta as ImportMeta & { env?: Record<string, string | undefined> })
-        .env?.VITE_API_BASE_URL || ''
-    ).replace(/\/$/, '');
+    const rawApiBase = (
+      (
+        (import.meta as ImportMeta & { env?: Record<string, string | undefined> })
+          .env?.VITE_API_BASE_URL || ''
+      ).trim()
+    );
+    const apiBase = /^https?:\/\//i.test(rawApiBase)
+      ? rawApiBase.replace(/\/+$/, '')
+      : '';
 
     let response: Response;
     try {
