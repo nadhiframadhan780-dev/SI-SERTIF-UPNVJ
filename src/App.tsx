@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Menu, PlusCircle } from 'lucide-react';
+import { Menu, PlusCircle, RefreshCw, Sparkles } from 'lucide-react';
 import type {
   CertificateFormValues,
   CertificateRecord,
   NavPage,
 } from './types/certificate';
+import type { AppBuildInfo, JustUpdatedRecord } from './types/update';
 import {
   calculateSkripsiProgress,
   collectJenisSuggestions,
@@ -30,6 +31,15 @@ import {
   CertificateEditModal,
 } from './components/CertificateModals';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import {
+  JUST_UPDATED_STORAGE_KEY,
+  UpdateManagerModal,
+} from './components/UpdateManagerModal';
+import {
+  getLocalBuildInfo,
+  hasNewerServerBuild,
+  isValidBuildManifest,
+} from './utils/updateLogic';
 
 const PAGE_TITLES: Record<NavPage, string> = {
   beranda: 'Beranda',
@@ -119,6 +129,152 @@ function MainAppContent() {
 
   const [detailCert, setDetailCert] = useState<CertificateRecord | null>(null);
   const [editCert, setEditCert] = useState<CertificateRecord | null>(null);
+
+  const localBuildInfo = useMemo(() => getLocalBuildInfo(), []);
+  const [remoteBuildInfo, setRemoteBuildInfo] = useState<AppBuildInfo | null>(
+    null
+  );
+  const [swHasUpdate, setSwHasUpdate] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [autoStartApply, setAutoStartApply] = useState(false);
+  const [justUpdated, setJustUpdated] = useState<JustUpdatedRecord | null>(
+    null
+  );
+
+  const hasPendingUpdate = useMemo(
+    () =>
+      swHasUpdate ||
+      hasNewerServerBuild(localBuildInfo.buildId, remoteBuildInfo),
+    [swHasUpdate, localBuildInfo.buildId, remoteBuildInfo]
+  );
+
+  const checkForUpdates = useCallback(
+    async (manual = false): Promise<boolean> => {
+      setCheckingUpdate(true);
+      try {
+        const response = await fetch(`/version.json?t=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          if (manual) {
+            showToast(
+              'info',
+              'Versi Terbaru Aktif',
+              'Anda sedang menggunakan versi terbaru yang tersimpan.'
+            );
+          }
+          return false;
+        }
+        const data: unknown = await response.json();
+        if (!isValidBuildManifest(data)) {
+          return false;
+        }
+        setRemoteBuildInfo(data);
+        const foundNew = hasNewerServerBuild(localBuildInfo.buildId, data);
+        if (manual) {
+          if (foundNew) {
+            showToast(
+              'info',
+              'Pembaruan Terbaru Tersedia',
+              `Versi ${data.version} siap diimplementasikan.`
+            );
+          } else {
+            showToast(
+              'success',
+              'Sudah Versi Terbaru',
+              `Aplikasi Anda sudah menggunakan versi v${localBuildInfo.version}.`
+            );
+          }
+        }
+        return foundNew;
+      } catch {
+        if (manual) {
+          showToast(
+            'warning',
+            'Tidak Dapat Memeriksa Pembaruan',
+            'Periksa koneksi internet untuk mengecek pembaruan dari server.'
+          );
+        }
+        return false;
+      } finally {
+        setCheckingUpdate(false);
+      }
+    },
+    [localBuildInfo.buildId, localBuildInfo.version, showToast]
+  );
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(JUST_UPDATED_STORAGE_KEY);
+      if (raw) {
+        sessionStorage.removeItem(JUST_UPDATED_STORAGE_KEY);
+        const parsed = JSON.parse(raw) as JustUpdatedRecord;
+        setJustUpdated(parsed);
+        setAutoStartApply(false);
+        setUpdateModalOpen(true);
+        showToast(
+          'success',
+          'Pembaruan Berhasil Diimplementasikan',
+          `SI-SERTIF UPNVJ telah diperbarui ke versi v${parsed.toVersion}.`
+        );
+      }
+    } catch {
+      // ignore storage parse failures
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    void checkForUpdates(false);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void checkForUpdates(false);
+      }
+    }, 60000);
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void checkForUpdates(false);
+      }
+    };
+
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+
+    let cleanupSw: (() => void) | undefined;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .getRegistration()
+        .then((reg) => {
+          if (!reg) return;
+          if (reg.waiting) {
+            setSwHasUpdate(true);
+          }
+          const onUpdateFound = () => {
+            const installing = reg.installing;
+            if (!installing) return;
+            installing.addEventListener('statechange', () => {
+              if (
+                installing.state === 'installed' &&
+                navigator.serviceWorker.controller
+              ) {
+                setSwHasUpdate(true);
+              }
+            });
+          };
+          reg.addEventListener('updatefound', onUpdateFound);
+          cleanupSw = () => reg.removeEventListener('updatefound', onUpdateFound);
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+      cleanupSw?.();
+    };
+  }, [checkForUpdates]);
 
   const refreshCertificates = useCallback(async () => {
     try {
@@ -359,6 +515,35 @@ function MainAppContent() {
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setAutoStartApply(hasPendingUpdate);
+                setUpdateModalOpen(true);
+              }}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all whitespace-nowrap ${
+                hasPendingUpdate
+                  ? 'bg-amber-400 text-slate-950 shadow-sm hover:bg-amber-500 ring-2 ring-amber-200'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/60 hover:text-teal-800'
+              }`}
+            >
+              {hasPendingUpdate ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span className="hidden md:inline">
+                    Implementasikan Pembaruan Terbaru
+                  </span>
+                  <span className="md:hidden">Update Baru</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 text-teal-600" />
+                  <span className="hidden sm:inline">Info Pembaruan</span>
+                  <span className="sm:hidden">Update</span>
+                </>
+              )}
+            </button>
+
             {activePage !== 'tambah' && (
               <button
                 type="button"
@@ -459,6 +644,22 @@ function MainAppContent() {
         jenisSuggestions={jenisSuggestions}
         onClose={() => setEditCert(null)}
         onSave={handleUpdateCertificate}
+      />
+
+      <UpdateManagerModal
+        open={updateModalOpen}
+        onClose={() => {
+          setUpdateModalOpen(false);
+          setAutoStartApply(false);
+        }}
+        localInfo={localBuildInfo}
+        remoteInfo={remoteBuildInfo}
+        hasUpdate={hasPendingUpdate}
+        checking={checkingUpdate}
+        justUpdated={justUpdated}
+        autoStartApply={autoStartApply}
+        onCheckNow={() => checkForUpdates(true)}
+        onClearJustUpdated={() => setJustUpdated(null)}
       />
 
       <OfflineIndicator />
