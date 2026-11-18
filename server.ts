@@ -3,205 +3,25 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import {
+  extractCertificateFromPayload,
+  type ExtractRequestBody,
+} from './server/extractCertificate.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
 
-interface ExtractRequestBody {
-  extractedText?: string;
-  imageBase64?: string;
-  mimeType?: string;
-  fileName?: string;
-}
-
-function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    return null;
-  }
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
-}
-
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
 
   app.post('/api/extract-certificate', async (req, res) => {
-    try {
-      const body = (req.body || {}) as ExtractRequestBody;
-      const extractedText = (body.extractedText || '').trim();
-      const imageBase64 = (body.imageBase64 || '').trim();
-      const mimeType = body.mimeType || 'image/jpeg';
-      const fileName = (body.fileName || '').trim();
-
-      const ai = getGeminiClient();
-      if (!ai) {
-        res.status(503).json({
-          error: 'Layanan AI belum dikonfigurasi pada server.',
-          code: 'AI_UNAVAILABLE',
-        });
-        return;
-      }
-
-      if (!extractedText && !imageBase64) {
-        res.status(400).json({
-          error: 'Data teks atau gambar sertifikat tidak ditemukan.',
-          code: 'INVALID_INPUT',
-        });
-        return;
-      }
-
-      const instruction = [
-        'Anda adalah asisten akademik UPN Veteran Jakarta yang mengekstrak informasi inti dari dokumen sertifikat mahasiswa.',
-        'Tugas Anda: hasilkan JSON dengan dua field berbahasa Indonesia yang rapi, akurat, dan formal:',
-        '1. "namaSertifikat": Nama resmi sertifikat, judul kegiatan, pelatihan, seminar, lomba, atau sertifikasi (singkat & jelas, maksimal 120 karakter, tanpa tanda kutip berlebih).',
-        '2. "deskripsi": Deskripsi ringkas sebanyak 1 sampai 3 kalimat dalam bahasa Indonesia yang menjelaskan kegiatan apa ini, diselenggarakan oleh siapa, dan atas nama siapa apabila tercantum pada sertifikat.',
-        'Jangan mengarang informasi yang tidak ada di dokumen. Jika sebagian detail tidak terlihat, tuliskan sebatas fakta yang terbaca.',
-      ].join('\n');
-
-      const parts: Array<
-        | { text: string }
-        | { inlineData: { mimeType: string; data: string } }
-      > = [];
-
-      if (imageBase64) {
-        parts.push({
-          inlineData: {
-            mimeType,
-            data: imageBase64,
-          },
-        });
-      }
-
-      const contextText = extractedText
-        ? `Berikut teks yang diekstrak dari PDF sertifikat (nama file: "${fileName}"):\n\n${extractedText.slice(0, 12000)}`
-        : `Dokumen ini merupakan sertifikat hasil pindai (gambar halaman pertama terlampir). Nama file asli: "${fileName}". Mohon baca teks di gambar sertifikat ini dengan cermat.`;
-
-      parts.push({ text: contextText });
-
-      const maxAttempts = 2;
-      let response;
-      let lastError: unknown;
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          response = await ai.models.generateContent({
-            model: 'gemini-4-hydrogen',
-            contents: { parts },
-            config: {
-              thinkingConfig: {
-                thinkingLevel: ThinkingLevel.LOW,
-              },
-              systemInstruction: instruction,
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  namaSertifikat: {
-                    type: Type.STRING,
-                    description: 'Nama resmi sertifikat atau kegiatan.',
-                  },
-                  deskripsi: {
-                    type: Type.STRING,
-                    description:
-                      'Deskripsi singkat 1-3 kalimat mengenai kegiatan, penyelenggara, dan penerima sertifikat.',
-                  },
-                },
-                required: ['namaSertifikat', 'deskripsi'],
-              },
-            },
-          });
-          break;
-        } catch (err) {
-          lastError = err;
-          const msg = err instanceof Error ? err.message : String(err);
-          const isTransient =
-            msg.includes('429') ||
-            msg.includes('503') ||
-            msg.includes('UNAVAILABLE') ||
-            msg.includes('RESOURCE_EXHAUSTED') ||
-            msg.includes('ECONNRESET') ||
-            msg.includes('ETIMEDOUT');
-          if (attempt < maxAttempts && isTransient) {
-            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
-            continue;
-          }
-          throw err;
-        }
-      }
-
-      if (!response) {
-        throw lastError ?? new Error('No response from Gemini API');
-      }
-
-      const rawText = (response.text || '')
-        .trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-
-      if (!rawText) {
-        res.status(502).json({
-          error: 'Respons AI kosong saat membaca sertifikat.',
-          code: 'EMPTY_RESPONSE',
-        });
-        return;
-      }
-
-      const parsed = JSON.parse(rawText) as {
-        namaSertifikat?: string;
-        deskripsi?: string;
-      };
-
-      res.json({
-        namaSertifikat: (parsed.namaSertifikat || '').trim(),
-        deskripsi: (parsed.deskripsi || '').trim(),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error('Certificate extraction error:', error);
-
-      if (
-        message.includes('API_KEY_INVALID') ||
-        message.includes('PERMISSION_DENIED') ||
-        message.includes('API key not valid') ||
-        message.includes('403')
-      ) {
-        res.status(401).json({
-          error:
-            'Kunci API Gemini tidak valid atau belum memiliki izin. Periksa GEMINI_API_KEY di Settings > Secrets atau file .env server.',
-          code: 'API_KEY_INVALID',
-        });
-        return;
-      }
-
-      if (
-        message.includes('RESOURCE_EXHAUSTED') ||
-        message.includes('429')
-      ) {
-        res.status(429).json({
-          error:
-            'Kuota permintaan AI sementara penuh. Tunggu sebentar lalu coba unggah ulang, atau isi detail secara manual.',
-          code: 'RATE_LIMITED',
-        });
-        return;
-      }
-
-      res.status(500).json({
-        error: 'Gagal mengekstrak metadata sertifikat melalui AI.',
-        code: 'EXTRACTION_FAILED',
-      });
-    }
+    const result = await extractCertificateFromPayload(
+      (req.body || {}) as ExtractRequestBody
+    );
+    res.status(result.status).json(result.body);
   });
 
   const httpServer = http.createServer(app);
