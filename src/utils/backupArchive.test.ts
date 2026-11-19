@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { BackupFilePayload } from '../types/certificate';
+import type {
+  BackupFilePayload,
+  CertificateRecord,
+} from '../types/certificate';
 import {
   computeCrc32,
   createUpnvjdatsBlob,
+  createUpnvjdatsBlobFromRecords,
   decodeUpnvjdatsBytes,
   encodeUpnvjdatsArchive,
   readBackupFile,
@@ -32,7 +36,55 @@ const SAMPLE_PAYLOAD: BackupFilePayload = {
   ],
 };
 
-test('encodeUpnvjdatsArchive creates UPNVJDTS binary header and round-trips with compression', async () => {
+const SAMPLE_RECORDS: CertificateRecord[] = [
+  {
+    id: 'cert-v2-1',
+    namaSertifikat: 'Sertifikat Konferensi Besar',
+    deskripsi: 'Dokumen sertifikat ukuran besar.',
+    jenisSertifikat: 'Seminar',
+    tanggalDiperoleh: '2026-11-19',
+    isSyaratSkripsi: true,
+    fileName: 'konferensi-besar.pdf',
+    fileSize: 128,
+    mimeType: 'application/pdf',
+    pdfBlob: new Blob(['%PDF-1.4\n%LargeBinarySampleContent\n%%EOF'], {
+      type: 'application/pdf',
+    }),
+    createdAt: '2026-11-19T08:00:00.000Z',
+    updatedAt: '2026-11-19T08:00:00.000Z',
+  },
+];
+
+test('createUpnvjdatsBlobFromRecords creates streaming v2 .upnvjdats archive and restores exact Blob', async () => {
+  const archiveBlob = await createUpnvjdatsBlobFromRecords(SAMPLE_RECORDS);
+  assert.equal(archiveBlob.type, 'application/octet-stream');
+
+  const head = new Uint8Array(await archiveBlob.slice(0, 9).arrayBuffer());
+  assert.deepEqual(Array.from(head.subarray(0, 8)), Array.from(UPNVJDATS_MAGIC));
+  assert.equal(head[8], 2);
+
+  const decoded = await readBackupFile(archiveBlob);
+  assert.equal(decoded.valid, true);
+  assert.equal(decoded.format, 'upnvjdats-v2');
+  assert.equal(decoded.records?.length, 1);
+  assert.equal(decoded.records?.[0].namaSertifikat, 'Sertifikat Konferensi Besar');
+  assert.equal(
+    await decoded.records?.[0].pdfBlob.text(),
+    await SAMPLE_RECORDS[0].pdfBlob.text()
+  );
+});
+
+test('v2 .upnvjdats archive detects bit-level corruption in PDF payload', async () => {
+  const archiveBlob = await createUpnvjdatsBlobFromRecords(SAMPLE_RECORDS);
+  const bytes = new Uint8Array(await archiveBlob.arrayBuffer());
+  bytes[bytes.length - 1] ^= 0xff;
+
+  const corrupted = await readBackupFile(new Blob([bytes]));
+  assert.equal(corrupted.valid, false);
+  assert.match(corrupted.error || '', /integritas|rusak/i);
+});
+
+test('encodeUpnvjdatsArchive creates UPNVJDTS v1 binary header and round-trips with compression', async () => {
   const archive = await encodeUpnvjdatsArchive(SAMPLE_PAYLOAD);
   assert.deepEqual(
     Array.from(archive.subarray(0, 8)),
@@ -66,7 +118,7 @@ test('createUpnvjdatsBlob and readBackupFile work via Blob with octet-stream MIM
   assert.deepEqual(decoded.payload, SAMPLE_PAYLOAD);
 });
 
-test('decodeUpnvjdatsBytes detects corrupted or truncated .upnvjdats files via CRC32/length', async () => {
+test('decodeUpnvjdatsBytes detects corrupted or truncated .upnvjdats v1 files via CRC32/length', async () => {
   const archive = await encodeUpnvjdatsArchive(SAMPLE_PAYLOAD);
   const tampered = new Uint8Array(archive);
   tampered[tampered.length - 1] ^= 0xff;

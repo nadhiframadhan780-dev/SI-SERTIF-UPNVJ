@@ -17,72 +17,117 @@ export interface AiCertificateAnalysis {
   message?: string;
 }
 
-export async function loadPdfDocument(blob: Blob) {
+export interface LoadedPdfHandle {
+  pdf: pdfjsLib.PDFDocumentProxy;
+  dispose: () => Promise<void>;
+}
+
+export async function loadPdfDocument(blob: Blob): Promise<LoadedPdfHandle> {
+  if (
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function' &&
+    blob.size > 16 * 1024 * 1024
+  ) {
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const loadingTask = pdfjsLib.getDocument({
+        url: objectUrl,
+        disableAutoFetch: true,
+        disableStream: false,
+      });
+      const pdf = await loadingTask.promise;
+      return {
+        pdf,
+        dispose: async () => {
+          try {
+            await loadingTask.destroy();
+          } finally {
+            URL.revokeObjectURL(objectUrl);
+          }
+        },
+      };
+    } catch (err) {
+      URL.revokeObjectURL(objectUrl);
+      throw err;
+    }
+  }
+
   const arrayBuffer = await blob.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(arrayBuffer),
   });
-  return loadingTask.promise;
+  const pdf = await loadingTask.promise;
+  return {
+    pdf,
+    dispose: async () => {
+      await loadingTask.destroy();
+    },
+  };
 }
 
 export async function extractPdfContentForAi(
   blob: Blob
 ): Promise<PdfExtractionResult> {
-  const pdf = await loadPdfDocument(blob);
-  const numPages = pdf.numPages;
-  const maxPagesToRead = Math.min(numPages, 2);
-  const textChunks: string[] = [];
+  const { pdf, dispose } = await loadPdfDocument(blob);
+  try {
+    const numPages = pdf.numPages;
+    const maxPagesToRead = Math.min(numPages, 2);
+    const textChunks: string[] = [];
 
-  for (let pageNum = 1; pageNum <= maxPagesToRead; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (pageText) {
-      textChunks.push(pageText);
+    for (let pageNum = 1; pageNum <= maxPagesToRead; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => ('str' in item ? item.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (pageText) {
+        textChunks.push(pageText);
+      }
     }
-  }
 
-  const extractedText = textChunks.join('\n').trim();
+    const extractedText = textChunks.join('\n').trim();
 
-  // If PDF is scanned (very little or no selectable text), render first page as compact JPEG image
-  if (extractedText.length < 25) {
-    const firstPage = await pdf.getPage(1);
-    const baseViewport = firstPage.getViewport({ scale: 1 });
-    const maxDimension = Math.max(baseViewport.width, baseViewport.height) || 1;
-    const clampedScale = Math.min(1.35, Math.max(0.5, 1024 / maxDimension));
-    const viewport = firstPage.getViewport({ scale: clampedScale });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    const ctx = canvas.getContext('2d');
+    // If PDF is scanned (very little or no selectable text), render first page as compact JPEG image
+    if (extractedText.length < 25) {
+      const firstPage = await pdf.getPage(1);
+      const baseViewport = firstPage.getViewport({ scale: 1 });
+      const maxDimension =
+        Math.max(baseViewport.width, baseViewport.height) || 1;
+      const clampedScale = Math.min(1.35, Math.max(0.5, 1024 / maxDimension));
+      const viewport = firstPage.getViewport({ scale: clampedScale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext('2d');
 
-    if (ctx) {
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await firstPage.render({
-        canvasContext: ctx,
-        canvas,
-        viewport,
-      }).promise;
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-      const imageBase64 = dataUrl.split(',')[1] || '';
-      return {
-        extractedText,
-        imageBase64,
-        mimeType: 'image/jpeg',
-        numPages,
-      };
+      if (ctx) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await firstPage.render({
+          canvasContext: ctx,
+          canvas,
+          viewport,
+        }).promise;
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        const imageBase64 = dataUrl.split(',')[1] || '';
+        return {
+          extractedText,
+          imageBase64,
+          mimeType: 'image/jpeg',
+          numPages,
+        };
+      }
     }
-  }
 
-  return {
-    extractedText,
-    numPages,
-  };
+    return {
+      extractedText,
+      numPages,
+    };
+  } finally {
+    await dispose().catch(() => {});
+  }
 }
 
 export async function analyzeCertificatePdf(

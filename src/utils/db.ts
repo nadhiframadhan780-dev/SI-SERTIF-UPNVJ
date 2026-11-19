@@ -155,3 +155,24 @@ export async function restoreBackupPayload(
   await tx.done;
   return count;
 }
+
+export async function restoreCertificateRecords(
+  records: CertificateRecord[],
+  mode: 'merge' | 'replace'
+): Promise<number> {
+  const db = await getDb();
+  const tx = db.transaction('certificates', 'readwrite');
+
+  if (mode === 'replace') {
+    await tx.store.clear();
+  }
+
+  let count = 0;
+  for (const record of records) {
+    await tx.store.put(record);
+    count++;
+  }
+
+  await tx.done;
+  return count;
+}

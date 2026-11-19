@@ -81,7 +81,7 @@ export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
       file.name,
       abortCtrl.signal
     );
-    if (aiAbortRef.current !== abortCtrl) return;
+    if (aiAbortRef.current !== abortCtrl || abortCtrl.signal.aborted) return;
     setAnalyzingAi(false);
 
     setValues((prev) => ({
@@ -173,11 +173,17 @@ export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
 
       await onSaveCertificate(record);
       onSuccessNavigate();
-    } catch {
+    } catch (err) {
+      const isQuotaError =
+        err instanceof Error && err.name === 'QuotaExceededError';
       showToast(
         'error',
-        'Gagal Menyimpan Sertifikat',
-        'Terjadi kendala saat menyimpan file ke IndexedDB browser.'
+        isQuotaError
+          ? 'Ruang Penyimpanan Penuh'
+          : 'Gagal Menyimpan Sertifikat',
+        isQuotaError
+          ? 'Ruang penyimpanan browser/perangkat tidak mencukupi untuk file PDF ini. Kosongkan penyimpanan atau buat backup terlebih dahulu.'
+          : 'Terjadi kendala saat menyimpan file ke IndexedDB browser.'
       );
     } finally {
       setSaving(false);
@@ -191,7 +197,7 @@ export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
           Tambah Sertifikat Baru
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Unggah dokumen sertifikat berformat PDF (maksimal 10 MB). Nama dan
+          Unggah dokumen sertifikat berformat PDF (maksimal 1 GB). Nama dan
           deskripsi akan dianalisis otomatis, lalu lengkapi jenis dan tanggalnya.
         </p>
       </div>
@@ -264,7 +270,7 @@ export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
                   Seret dan lepas file PDF sertifikat ke sini
                 </p>
                 <p className="text-xs text-slate-500">
-                  Hanya mendukung format PDF (.pdf) dengan ukuran maksimal 10 MB
+                  Hanya mendukung format PDF (.pdf) dengan ukuran maksimal 1 GB
                 </p>
                 <div className="pt-2">
                   <label
@@ -329,7 +335,15 @@ export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => aiAbortRef.current?.abort()}
+                onClick={() => {
+                  const ctrl = aiAbortRef.current;
+                  aiAbortRef.current = null;
+                  ctrl?.abort();
+                  setAnalyzingAi(false);
+                  setAiStatusNote(
+                    'Pengisian manual diaktifkan. Silakan lengkapi nama dan deskripsi sertifikat.'
+                  );
+                }}
                 className="rounded-lg border border-teal-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-teal-800 hover:bg-teal-50 whitespace-nowrap"
               >
                 Isi Manual

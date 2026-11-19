@@ -36,10 +36,26 @@ function makeCert(
   };
 }
 
-test('validatePdfFile enforces PDF extension, MIME, non-empty, and 10MB limit', () => {
+test('validatePdfFile enforces PDF extension, MIME, non-empty, and 1GB limit', () => {
   assert.equal(
     validatePdfFile({ name: 'sertif.pdf', type: 'application/pdf', size: 1024 })
       .valid,
+    true
+  );
+  assert.equal(
+    validatePdfFile({
+      name: 'big10mb.pdf',
+      type: 'application/pdf',
+      size: 10 * 1024 * 1024,
+    }).valid,
+    true
+  );
+  assert.equal(
+    validatePdfFile({
+      name: 'exact1gb.pdf',
+      type: 'application/pdf',
+      size: MAX_PDF_SIZE_BYTES,
+    }).valid,
     true
   );
   assert.equal(
@@ -220,6 +236,7 @@ test('collectJenisSuggestions merges custom user types before defaults without d
 test('formatIndonesianDate and formatFileSize format cleanly', () => {
   assert.equal(formatIndonesianDate('2026-11-15'), '15 November 2026');
   assert.equal(formatFileSize(1536), '1.5 KB');
+  assert.equal(formatFileSize(1024 * 1024 * 1024), '1.00 GB');
 });
 
 test('validateBackupPayload rejects foreign files and accepts valid backup', () => {

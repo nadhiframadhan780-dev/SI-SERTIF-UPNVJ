@@ -12,15 +12,16 @@ import {
 } from 'lucide-react';
 import type { CertificateRecord } from '../types/certificate';
 import {
-  createUpnvjdatsBlob,
+  createUpnvjdatsBlobFromRecords,
   readBackupFile,
   UPNVJDATS_EXTENSION,
 } from '../utils/backupArchive';
 import { formatFileSize } from '../utils/certificateLogic';
 import {
   clearAllCertificates,
-  exportBackupPayload,
+  getAllCertificates,
   restoreBackupPayload,
+  restoreCertificateRecords,
 } from '../utils/db';
 import { useFeedback } from './ToastProvider';
 
@@ -58,8 +59,8 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
 
     setExporting(true);
     try {
-      const payload = await exportBackupPayload();
-      const blob = await createUpnvjdatsBlob(payload);
+      const allCerts = await getAllCertificates();
+      const blob = await createUpnvjdatsBlobFromRecords(allCerts);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const dateStamp = new Date().toISOString().slice(0, 10);
@@ -75,7 +76,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
       showToast(
         'success',
         'Backup .upnvjdats Berhasil Diunduh',
-        `${payload.certificates.length} sertifikat beserta file PDF telah dikemas (${formatFileSize(blob.size)}).`
+        `${allCerts.length} sertifikat beserta file PDF telah dikemas (${formatFileSize(blob.size)}).`
       );
     } catch {
       showToast(
@@ -94,7 +95,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
     setRestoring(true);
     try {
       const decoded = await readBackupFile(file);
-      if (!decoded.valid || !decoded.payload) {
+      if (!decoded.valid || (!decoded.records && !decoded.payload)) {
         showToast(
           'error',
           'Backup Tidak Valid',
@@ -104,7 +105,9 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         return;
       }
 
-      const incomingCount = decoded.payload.certificates.length;
+      const incomingCount = decoded.records
+        ? decoded.records.length
+        : decoded.payload!.certificates.length;
       const shouldProceed =
         certificates.length > 0
           ? await confirm({
@@ -127,10 +130,9 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         return;
       }
 
-      const restoredCount = await restoreBackupPayload(
-        decoded.payload,
-        restoreMode
-      );
+      const restoredCount = decoded.records
+        ? await restoreCertificateRecords(decoded.records, restoreMode)
+        : await restoreBackupPayload(decoded.payload!, restoreMode);
       await onRefreshCertificates();
 
       showToast(
@@ -142,11 +144,17 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
             : 'digabungkan dengan data yang ada'
         }).`
       );
-    } catch {
+    } catch (err) {
+      const isQuotaError =
+        err instanceof Error && err.name === 'QuotaExceededError';
       showToast(
         'error',
-        'Gagal Memulihkan Backup',
-        'Pastikan file .upnvjdats tidak rusak dan berasal dari SI-SERTIF UPNVJ.'
+        isQuotaError
+          ? 'Ruang Penyimpanan Browser Penuh'
+          : 'Gagal Memulihkan Backup',
+        isQuotaError
+          ? 'Kapasitas penyimpanan perangkat/browser tidak mencukupi untuk menampung seluruh PDF dari file backup ini.'
+          : 'Pastikan file .upnvjdats tidak rusak dan berasal dari SI-SERTIF UPNVJ.'
       );
     } finally {
       setRestoring(false);
@@ -218,7 +226,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
             {formatFileSize(totalBytes)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Mendukung dokumen PDF hingga 10 MB per file
+            Mendukung dokumen PDF hingga 1 GB per file
           </p>
         </div>
       </section>

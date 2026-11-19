@@ -7,7 +7,7 @@ import type {
   SkripsiProgress,
 } from '../types/certificate';
 
-export const MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+export const MAX_PDF_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
 export const SKRIPSI_TARGET_COUNT = 5;
 
 export const DEFAULT_JENIS_SUGGESTIONS: string[] = [
@@ -72,7 +72,7 @@ export function validatePdfFile(file: {
   if (file.size > MAX_PDF_SIZE_BYTES) {
     return {
       valid: false,
-      error: 'Ukuran file melebihi batas maksimal 10 MB. Kompres PDF Anda terlebih dahulu.',
+      error: 'Ukuran file melebihi batas maksimal 1 GB. Kompres PDF Anda terlebih dahulu.',
     };
   }
 
@@ -312,7 +312,10 @@ export function formatIndonesianDate(isoDate: string): string {
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function validateBackupPayload(data: unknown): {

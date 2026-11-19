@@ -156,7 +156,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Penyimpanan Lokal PDF Besar
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-slate-600">
-              Menggunakan IndexedDB sehingga dokumen PDF hingga 10 MB tersimpan
+              Menggunakan IndexedDB sehingga dokumen PDF hingga 1 GB tersimpan
               rapi dan tetap dapat diakses tanpa koneksi internet.
             </p>
           </div>

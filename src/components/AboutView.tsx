@@ -24,7 +24,7 @@ export const AboutView: React.FC = () => {
     {
       Icon: Database,
       title: 'Penyimpanan IndexedDB & Backup',
-      desc: 'File PDF berukuran besar hingga 10 MB tersimpan lokal di browser, lengkap dengan fitur ekspor dan restore file cadangan.',
+      desc: 'File PDF berukuran besar hingga 1 GB tersimpan lokal di browser, lengkap dengan fitur ekspor dan restore file cadangan.',
     },
     {
       Icon: Smartphone,
@@ -37,7 +37,7 @@ export const AboutView: React.FC = () => {
     {
       number: '01',
       title: 'Unggah Sertifikat PDF',
-      desc: 'Masuk ke menu Tambah Sertifikat, seret atau pilih file PDF sertifikat Anda (maksimal 10 MB).',
+      desc: 'Masuk ke menu Tambah Sertifikat, seret atau pilih file PDF sertifikat Anda (maksimal 1 GB).',
     },
     {
       number: '02',

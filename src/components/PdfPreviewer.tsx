@@ -29,9 +29,23 @@ export const PdfPreviewer: React.FC<PdfPreviewerProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pdfDocRef = useRef<{
+    blob: Blob;
+    handle: Awaited<ReturnType<typeof loadPdfDocument>>;
+  } | null>(null);
+
   useEffect(() => {
     setCurrentPage(1);
     setZoom(1);
+  }, [pdfBlob]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfDocRef.current) {
+        void pdfDocRef.current.handle.dispose().catch(() => {});
+        pdfDocRef.current = null;
+      }
+    };
   }, [pdfBlob]);
 
   useEffect(() => {
@@ -45,8 +59,19 @@ export const PdfPreviewer: React.FC<PdfPreviewerProps> = ({
       setLoading(true);
       setError(null);
       try {
-        const pdf = await loadPdfDocument(pdfBlob);
-        if (cancelled) return;
+        let handle =
+          pdfDocRef.current && pdfDocRef.current.blob === pdfBlob
+            ? pdfDocRef.current.handle
+            : null;
+        if (!handle) {
+          handle = await loadPdfDocument(pdfBlob);
+          if (cancelled) {
+            void handle.dispose().catch(() => {});
+            return;
+          }
+          pdfDocRef.current = { blob: pdfBlob, handle };
+        }
+        const { pdf } = handle;
         setNumPages(pdf.numPages);
 
         const safePage = Math.min(Math.max(1, currentPage), pdf.numPages);
