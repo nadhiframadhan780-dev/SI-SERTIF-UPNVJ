@@ -19,17 +19,20 @@ import {
   type FormValidationErrors,
 } from '../utils/certificateLogic';
 import { analyzeCertificatePdf } from '../utils/pdfService';
+import { DeviceStorageCard } from './DeviceStorageCard';
 import { PdfPreviewer } from './PdfPreviewer';
 import { useFeedback } from './ToastProvider';
 
 interface AddCertificateViewProps {
   jenisSuggestions: string[];
+  certificatesTotalBytes?: number;
   onSaveCertificate: (record: CertificateRecord) => Promise<void>;
   onSuccessNavigate: () => void;
 }
 
 export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
   jenisSuggestions,
+  certificatesTotalBytes = 0,
   onSaveCertificate,
   onSuccessNavigate,
 }) => {
@@ -299,6 +302,11 @@ export const AddCertificateView: React.FC<AddCertificateViewProps> = ({
               maxHeightClass="max-h-[480px]"
             />
           )}
+
+          <DeviceStorageCard
+            certificatesTotalBytes={certificatesTotalBytes}
+            variant="compact"
+          />
         </div>
 
         {/* Right: Metadata Form */}

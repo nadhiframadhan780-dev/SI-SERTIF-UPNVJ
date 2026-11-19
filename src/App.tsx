@@ -597,6 +597,10 @@ function MainAppContent() {
               {activePage === 'tambah' && (
                 <AddCertificateView
                   jenisSuggestions={jenisSuggestions}
+                  certificatesTotalBytes={certificates.reduce(
+                    (sum, c) => sum + c.fileSize,
+                    0
+                  )}
                   onSaveCertificate={handleSaveNewCertificate}
                   onSuccessNavigate={() => setActivePage('sertifikat')}
                 />

@@ -12,6 +12,7 @@ export const APP_RELEASES: ReleaseNote[] = [
     highlights: [
       'Tombol Implementasikan Pembaruan Terbaru otomatis muncul saat ada build/deploy baru dari GitHub, lengkap dengan animasi progres penerapan dan ringkasan perubahan.',
       'Kapasitas unggah dokumen sertifikat PDF ditingkatkan hingga 1 GB dengan pemuatan streaming hemat memori serta arsip .upnvjdats v2 tanpa batas string.',
+      'Pemantau sisa penyimpanan perangkat (Storage Manager API) beserta saran batas maksimal GB yang aman disimpan dan opsi Penyimpanan Persisten.',
       'Format arsip backup resmi .upnvjdats dengan verifikasi integritas CRC32 streaming yang kompatibel saat dipulihkan di perangkat apa pun.',
       'Panel Riwayat Pembaruan menampilkan kapan aplikasi terakhir diperbarui, kode commit, serta daftar fitur yang sudah diimplementasikan.',
       'Penambahan menu Jadwal Kuliah S1 Akuntansi, Kalender UPNVJ 2026/2027, dan Planner Mhs Akuntansi di halaman Telusuri Cepat.',

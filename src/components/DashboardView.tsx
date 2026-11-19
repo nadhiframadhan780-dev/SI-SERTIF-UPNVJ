@@ -17,6 +17,7 @@ import type {
   SkripsiProgress,
 } from '../types/certificate';
 import { formatIndonesianDate } from '../utils/certificateLogic';
+import { DeviceStorageCard } from './DeviceStorageCard';
 import { LogoMark } from './Sidebar';
 
 interface DashboardViewProps {
@@ -104,6 +105,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const recentCertificates = certificates.slice(0, 5);
   const latestCert = certificates[0];
+  const totalCertificateBytes = certificates.reduce(
+    (sum, cert) => sum + cert.fileSize,
+    0
+  );
 
   if (certificates.length === 0) {
     return (
@@ -185,6 +190,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
         </section>
+
+        <DeviceStorageCard
+          certificatesTotalBytes={totalCertificateBytes}
+          variant="full"
+          onOpenBackup={() => onNavigate('backup')}
+        />
       </div>
     );
   }
@@ -410,6 +421,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </section>
+
+      <DeviceStorageCard
+        certificatesTotalBytes={totalCertificateBytes}
+        variant="full"
+        onOpenBackup={() => onNavigate('backup')}
+      />
     </div>
   );
 };

@@ -23,6 +23,7 @@ import {
   restoreBackupPayload,
   restoreCertificateRecords,
 } from '../utils/db';
+import { DeviceStorageCard } from './DeviceStorageCard';
 import { useFeedback } from './ToastProvider';
 
 interface BackupRestoreViewProps {
@@ -230,6 +231,9 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           </p>
         </div>
       </section>
+
+      {/* Device Storage Quota & Safe Limit Recommendation */}
+      <DeviceStorageCard certificatesTotalBytes={totalBytes} variant="full" />
 
       {/* Export & Restore Cards */}
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
