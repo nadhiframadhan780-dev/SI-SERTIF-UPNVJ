@@ -2,18 +2,21 @@ import React, { useRef, useState } from 'react';
 import {
   Database,
   Download,
-  FileJson,
+  FileArchive,
   HardDrive,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
 import type { CertificateRecord } from '../types/certificate';
 import {
-  formatFileSize,
-  validateBackupPayload,
-} from '../utils/certificateLogic';
+  createUpnvjdatsBlob,
+  readBackupFile,
+  UPNVJDATS_EXTENSION,
+} from '../utils/backupArchive';
+import { formatFileSize } from '../utils/certificateLogic';
 import {
   clearAllCertificates,
   exportBackupPayload,
@@ -38,6 +41,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [exporting, setExporting] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [isDraggingRestore, setIsDraggingRestore] = useState(false);
   const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
 
   const totalBytes = certificates.reduce((sum, c) => sum + c.fileSize, 0);
@@ -55,22 +59,23 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
     setExporting(true);
     try {
       const payload = await exportBackupPayload();
-      const jsonStr = JSON.stringify(payload, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const blob = await createUpnvjdatsBlob(payload);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const dateStamp = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `si-sertif-upnvj-backup-${dateStamp}.json`;
+      link.download = `si-sertif-upnvj-backup-${dateStamp}${UPNVJDATS_EXTENSION}`;
+      link.rel = 'noopener';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Delay revocation so mobile Safari / Android Chrome / WebViews finish reading the Blob URL
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 
       showToast(
         'success',
-        'Backup Berhasil Diunduh',
-        `${payload.certificates.length} sertifikat beserta file PDF telah diekspor.`
+        'Backup .upnvjdats Berhasil Diunduh',
+        `${payload.certificates.length} sertifikat beserta file PDF telah dikemas (${formatFileSize(blob.size)}).`
       );
     } catch {
       showToast(
@@ -83,37 +88,23 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
     }
   };
 
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+  const processRestoreFile = async (file: File | undefined) => {
     if (!file) return;
 
     setRestoring(true);
     try {
-      const rawText = await file.text();
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(rawText);
-      } catch {
-        showToast(
-          'error',
-          'File Rusak',
-          'File backup bukan JSON yang valid.'
-        );
-        return;
-      }
-
-      const validation = validateBackupPayload(parsed);
-      if (!validation.valid || !validation.payload) {
+      const decoded = await readBackupFile(file);
+      if (!decoded.valid || !decoded.payload) {
         showToast(
           'error',
           'Backup Tidak Valid',
-          validation.error || 'Struktur backup tidak dikenali.'
+          decoded.error ||
+            'Struktur file .upnvjdats tidak dikenali atau rusak.'
         );
         return;
       }
 
-      const incomingCount = validation.payload.certificates.length;
+      const incomingCount = decoded.payload.certificates.length;
       const shouldProceed =
         certificates.length > 0
           ? await confirm({
@@ -137,7 +128,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
       }
 
       const restoredCount = await restoreBackupPayload(
-        validation.payload,
+        decoded.payload,
         restoreMode
       );
       await onRefreshCertificates();
@@ -155,11 +146,17 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
       showToast(
         'error',
         'Gagal Memulihkan Backup',
-        'Pastikan file backup tidak rusak dan berasal dari SI-SERTIF UPNVJ.'
+        'Pastikan file .upnvjdats tidak rusak dan berasal dari SI-SERTIF UPNVJ.'
       );
     } finally {
       setRestoring(false);
     }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    await processRestoreFile(file);
   };
 
   const handleClearAll = async () => {
@@ -167,7 +164,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
 
     const ok = await confirm({
       title: 'Hapus Seluruh Data Sertifikat?',
-      message: `Tindakan ini akan menghapus ${certificates.length} sertifikat dan seluruh file PDF dari penyimpanan browser secara permanen. Pastikan Anda sudah membuat backup terlebih dahulu.`,
+      message: `Tindakan ini akan menghapus ${certificates.length} sertifikat dan seluruh file PDF dari penyimpanan browser secara permanen. Pastikan Anda sudah membuat backup .upnvjdats terlebih dahulu.`,
       confirmLabel: 'Ya, Hapus Semua',
       cancelLabel: 'Batal',
       variant: 'danger',
@@ -191,8 +188,9 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           Backup & Restore Data
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Cadangkan seluruh sertifikat beserta file PDF dari penyimpanan
-          IndexedDB agar aman saat berpindah perangkat atau membersihkan browser.
+          Cadangkan seluruh sertifikat beserta file PDF ke dalam satu file
+          arsip <code className="font-mono text-xs font-semibold">.upnvjdats</code>{' '}
+          yang ringkas dan kompatibel di semua perangkat (HP, tablet, maupun PC).
         </p>
       </div>
 
@@ -229,15 +227,23 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6">
           <div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
-              <FileJson className="h-5.5 w-5.5" />
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                <FileArchive className="h-5.5 w-5.5" />
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50/70 px-2.5 py-1 font-mono text-[11px] font-semibold text-teal-800">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                .upnvjdats
+              </span>
             </div>
             <h2 className="mt-4 text-base font-bold text-slate-900">
-              Ekspor Backup (.json)
+              Ekspor Backup (.upnvjdats)
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-              Mengunduh satu file cadangan berisi seluruh metadata sertifikat,
-              status syarat skripsi, dan file PDF asli Anda.
+              Mengemas seluruh metadata sertifikat, status syarat skripsi, dan
+              file PDF asli menjadi satu arsip terkompresi{' '}
+              <code className="font-mono text-xs">.upnvjdats</code> lengkap
+              dengan verifikasi integritas data lintas perangkat.
             </p>
           </div>
           <button
@@ -248,12 +254,31 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           >
             <Download className="h-4.5 w-4.5" />
             <span>
-              {exporting ? 'Menyiapkan Backup...' : 'Unduh File Backup'}
+              {exporting
+                ? 'Mengemas Arsip .upnvjdats...'
+                : 'Unduh File Backup (.upnvjdats)'}
             </span>
           </button>
         </div>
 
-        <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingRestore(true);
+          }}
+          onDragLeave={() => setIsDraggingRestore(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDraggingRestore(false);
+            const droppedFile = e.dataTransfer.files?.[0];
+            void processRestoreFile(droppedFile);
+          }}
+          className={`flex flex-col justify-between rounded-2xl border p-6 transition-colors ${
+            isDraggingRestore
+              ? 'border-emerald-400 bg-emerald-50/40'
+              : 'border-slate-200 bg-white'
+          }`}
+        >
           <div>
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
               <RotateCcw className="h-5.5 w-5.5" />
@@ -262,9 +287,10 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
               Restore dari File Backup
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-              Pilih file <code className="font-mono text-xs">.json</code> hasil
-              ekspor SI-SERTIF UPNVJ untuk memulihkan sertifikat beserta PDF-nya
-              ke perangkat ini.
+              Pilih atau seret file{' '}
+              <code className="font-mono text-xs">.upnvjdats</code> hasil ekspor
+              SI-SERTIF UPNVJ (juga mendukung arsip <code className="font-mono text-xs">.json</code> lama) untuk
+              memulihkan sertifikat beserta PDF-nya di perangkat ini.
             </p>
 
             <div className="mt-4">
@@ -300,10 +326,10 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
             </div>
           </div>
 
+          {/* Intentionally omit `accept` so Android/iOS OS file pickers never gray out custom `.upnvjdats` files */}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,application/json"
             onChange={(e) => void handleImportFile(e)}
             className="sr-only"
             id="restore-file-input"
@@ -317,7 +343,9 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           >
             <Upload className="h-4.5 w-4.5" />
             <span>
-              {restoring ? 'Memulihkan Data...' : 'Pilih File Backup (.json)'}
+              {restoring
+                ? 'Memulihkan Arsip...'
+                : 'Pilih File Backup (.upnvjdats)'}
             </span>
           </button>
         </div>

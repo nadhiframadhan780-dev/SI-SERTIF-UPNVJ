@@ -11,6 +11,7 @@ export const APP_RELEASES: ReleaseNote[] = [
       'Menambahkan detektor pembaruan otomatis saat ada perubahan baru dari GitHub/Vercel beserta halaman rincian fitur yang diimplementasikan, plus 3 portal baru mahasiswa Akuntansi UPNVJ.',
     highlights: [
       'Tombol Implementasikan Pembaruan Terbaru otomatis muncul saat ada build/deploy baru dari GitHub, lengkap dengan animasi progres penerapan dan ringkasan perubahan.',
+      'Format arsip backup resmi .upnvjdats dengan kompresi dan verifikasi integritas CRC32 yang kompatibel saat dipulihkan di perangkat apa pun.',
       'Panel Riwayat Pembaruan menampilkan kapan aplikasi terakhir diperbarui, kode commit, serta daftar fitur yang sudah diimplementasikan.',
       'Penambahan menu Jadwal Kuliah S1 Akuntansi, Kalender UPNVJ 2026/2027, dan Planner Mhs Akuntansi di halaman Telusuri Cepat.',
     ],

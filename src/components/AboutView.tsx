@@ -52,7 +52,7 @@ export const AboutView: React.FC = () => {
     {
       number: '04',
       title: 'Kelola & Cadangkan Secara Berkala',
-      desc: 'Gunakan fitur cari, filter, urutkan, dan lakukan Backup data ke file .json agar arsip sertifikat tetap aman.',
+      desc: 'Gunakan fitur cari, filter, urutkan, dan lakukan Backup data ke file .upnvjdats agar arsip sertifikat tetap aman di perangkat apa pun.',
     },
   ];
 
