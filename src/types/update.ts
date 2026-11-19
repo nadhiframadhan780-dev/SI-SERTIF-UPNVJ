@@ -19,6 +19,7 @@ export interface AppBuildInfo {
   commitMessage: string;
   builtAt: string;
   recentCommits: GitCommitSummary[];
+  releases?: ReleaseNote[];
 }
 
 export interface JustUpdatedRecord {

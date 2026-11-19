@@ -11,7 +11,11 @@ import {
 } from 'lucide-react';
 import { APP_RELEASES } from '../data/changelog';
 import type { AppBuildInfo, JustUpdatedRecord } from '../types/update';
-import { formatIndonesianDateTime } from '../utils/updateLogic';
+import { applyPwaUpdate } from '../utils/pwaUpdater';
+import {
+  formatIndonesianDateTime,
+  resolveDisplayReleases,
+} from '../utils/updateLogic';
 
 export const JUST_UPDATED_STORAGE_KEY = 'si_sertif_just_updated';
 
@@ -23,7 +27,6 @@ interface UpdateManagerModalProps {
   hasUpdate: boolean;
   checking: boolean;
   justUpdated: JustUpdatedRecord | null;
-  autoStartApply?: boolean;
   onCheckNow: () => Promise<boolean>;
   onClearJustUpdated: () => void;
 }
@@ -42,7 +45,6 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
   hasUpdate,
   checking,
   justUpdated,
-  autoStartApply = false,
   onCheckNow,
   onClearJustUpdated,
 }) => {
@@ -51,7 +53,14 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
   const [activeStepIndex, setActiveStepIndex] = useState(0);
 
   const activeManifest = remoteInfo || localInfo;
-  const latestRelease = APP_RELEASES[0];
+  const displayReleases = resolveDisplayReleases({
+    remoteInfo,
+    localInfo,
+    fallbackReleases: APP_RELEASES,
+    activeBuiltAt: justUpdated?.builtAt || activeManifest.builtAt,
+    activeVersion: justUpdated?.toVersion || activeManifest.version,
+  });
+  const latestRelease = displayReleases[0] || APP_RELEASES[0];
 
   const startApplyUpdate = async () => {
     if (applying) return;
@@ -64,6 +73,15 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
       setProgress(44);
       setActiveStepIndex(1);
 
+      if ('caches' in window) {
+        try {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map((name) => caches.delete(name)));
+        } catch {
+          // ignore cache deletion error
+        }
+      }
+
       if ('serviceWorker' in navigator) {
         try {
           const reg = await navigator.serviceWorker.getRegistration();
@@ -75,15 +93,6 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
           }
         } catch {
           // ignore SW refresh failures and still refresh cleanly
-        }
-      }
-
-      if ('caches' in window) {
-        try {
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map((name) => caches.delete(name)));
-        } catch {
-          // ignore cache deletion error
         }
       }
 
@@ -111,19 +120,14 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
 
       await new Promise((resolve) => setTimeout(resolve, 480));
       setProgress(100);
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await applyPwaUpdate();
+      await new Promise((resolve) => setTimeout(resolve, 250));
       window.location.reload();
     } catch {
       setApplying(false);
       setProgress(0);
     }
   };
-
-  useEffect(() => {
-    if (open && autoStartApply && hasUpdate && !applying) {
-      void startApplyUpdate();
-    }
-  }, [open, autoStartApply, hasUpdate]);
 
   useEffect(() => {
     if (!open) {
@@ -292,12 +296,12 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400/30 px-2.5 py-1 text-[11px] font-bold text-amber-950">
                         <Rocket className="h-3.5 w-3.5" />
                         <span>
-                          Pembaruan v{activeManifest.version} Siap Diterapkan
+                          Pembaruan v{activeManifest.version} Siap Diimplementasikan
                         </span>
                       </span>
                       <p className="mt-2 text-sm font-bold text-slate-900">
                         {activeManifest.commitMessage ||
-                          'Pembaruan terbaru dari repositori GitHub telah tersedia.'}
+                          'Pembaruan terbaru dari repositori GitHub telah tersedia. Tinjau daftar perubahan di bawah sebelum menerapkan.'}
                       </p>
                       <p className="mt-1 text-xs text-slate-600">
                         Dipublikasikan:{' '}
@@ -305,6 +309,7 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
                         {activeManifest.commitSha
                           ? ` · Commit ${activeManifest.commitSha}`
                           : ''}
+                        {' · Belum diterapkan ke sesi Anda'}
                       </p>
                     </div>
                     <button
@@ -313,7 +318,7 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
                       className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 whitespace-nowrap"
                     >
                       <RefreshCw className="h-4 w-4" />
-                      <span>Implementasikan Pembaruan Terbaru</span>
+                      <span>Implementasikan Pembaruan Sekarang</span>
                     </button>
                   </div>
                 </div>
@@ -341,7 +346,7 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-600" />
                       <span className="text-sm font-bold text-slate-900">
                         Aplikasi Sudah Versi Terbaru (v{localInfo.version})
                       </span>
@@ -408,7 +413,7 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
                   Penjelasan Fitur & Perubahan yang Diimplementasikan
                 </h3>
                 <div className="space-y-3">
-                  {APP_RELEASES.map((release, index) => (
+                  {displayReleases.map((release, index) => (
                     <div
                       key={release.version}
                       className={`rounded-2xl border p-4 ${
@@ -432,13 +437,22 @@ export const UpdateManagerModal: React.FC<UpdateManagerModalProps> = ({
                             {release.title}
                           </h4>
                         </div>
-                        <span className="text-[11px] font-medium text-slate-500">
+                        <span className="text-[11px] font-medium text-slate-600">
                           {release.dateLabel}
                         </span>
                       </div>
                       <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
                         {release.summary}
                       </p>
+                      {index === 0 && activeManifest.commitMessage && (
+                        <p className="mt-2 text-xs font-medium text-teal-900">
+                          Pembaruan build terakhir
+                          {activeManifest.commitSha
+                            ? ` (${activeManifest.commitSha})`
+                            : ''}
+                          : {activeManifest.commitMessage}
+                        </p>
+                      )}
                       <ul className="mt-2.5 space-y-1.5 text-xs text-slate-700">
                         {release.highlights.map((bullet) => (
                           <li key={bullet} className="flex items-start gap-2">

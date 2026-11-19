@@ -35,6 +35,7 @@ import {
   JUST_UPDATED_STORAGE_KEY,
   UpdateManagerModal,
 } from './components/UpdateManagerModal';
+import { initPwaUpdater } from './utils/pwaUpdater';
 import {
   getLocalBuildInfo,
   hasNewerServerBuild,
@@ -137,7 +138,6 @@ function MainAppContent() {
   const [swHasUpdate, setSwHasUpdate] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const [autoStartApply, setAutoStartApply] = useState(false);
   const [justUpdated, setJustUpdated] = useState<JustUpdatedRecord | null>(
     null
   );
@@ -211,7 +211,6 @@ function MainAppContent() {
         sessionStorage.removeItem(JUST_UPDATED_STORAGE_KEY);
         const parsed = JSON.parse(raw) as JustUpdatedRecord;
         setJustUpdated(parsed);
-        setAutoStartApply(false);
         setUpdateModalOpen(true);
         showToast(
           'success',
@@ -240,6 +239,8 @@ function MainAppContent() {
 
     window.addEventListener('focus', onFocusOrVisible);
     document.addEventListener('visibilitychange', onFocusOrVisible);
+
+    initPwaUpdater(() => setSwHasUpdate(true));
 
     let cleanupSw: (() => void) | undefined;
     if ('serviceWorker' in navigator) {
@@ -518,7 +519,6 @@ function MainAppContent() {
             <button
               type="button"
               onClick={() => {
-                setAutoStartApply(hasPendingUpdate);
                 setUpdateModalOpen(true);
               }}
               className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all whitespace-nowrap ${
@@ -654,14 +654,12 @@ function MainAppContent() {
         open={updateModalOpen}
         onClose={() => {
           setUpdateModalOpen(false);
-          setAutoStartApply(false);
         }}
         localInfo={localBuildInfo}
         remoteInfo={remoteBuildInfo}
         hasUpdate={hasPendingUpdate}
         checking={checkingUpdate}
         justUpdated={justUpdated}
-        autoStartApply={autoStartApply}
         onCheckNow={() => checkForUpdates(true)}
         onClearJustUpdated={() => setJustUpdated(null)}
       />

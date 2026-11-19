@@ -1,8 +1,21 @@
 import type { ReleaseNote } from '../types/update';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 export const APP_RELEASES: ReleaseNote[] = [
+  {
+    version: '1.5.0',
+    dateLabel: '19 November 2026',
+    title: 'Dukungan PDF 1 GB, Monitor Storage & Konfirmasi Update Manual',
+    summary:
+      'Menaikkan batas PDF hingga 1 GB dengan arsip .upnvjdats v2 streaming, menambahkan pemantau sisa storage perangkat beserta saran GB aman, serta memastikan pembaruan baru hanya diterapkan setelah Anda meninjau perubahan dan menekan tombol Implementasikan.',
+    highlights: [
+      'Pratinjau perubahan sebelum update: pengguna dapat melihat daftar fitur dan commit terbaru terlebih dahulu lalu memilih Implementasikan Pembaruan Sekarang secara manual (tidak langsung terpasang otomatis).',
+      'Tanggal pada penjelasan pembaruan terbaru kini selalu mengikuti waktu pembaruan terakhir berjalan secara dinamis.',
+      'Kapasitas unggah dokumen sertifikat PDF ditingkatkan hingga 1 GB dengan pemuatan streaming hemat memori serta arsip .upnvjdats v2 tanpa batas string.',
+      'Pemantau sisa penyimpanan perangkat (Storage Manager API) beserta saran batas maksimal GB yang aman disimpan dan opsi Penyimpanan Persisten.',
+    ],
+  },
   {
     version: '1.4.0',
     dateLabel: '18 November 2026',
@@ -11,8 +24,6 @@ export const APP_RELEASES: ReleaseNote[] = [
       'Menambahkan detektor pembaruan otomatis saat ada perubahan baru dari GitHub/Vercel beserta halaman rincian fitur yang diimplementasikan, plus 3 portal baru mahasiswa Akuntansi UPNVJ.',
     highlights: [
       'Tombol Implementasikan Pembaruan Terbaru otomatis muncul saat ada build/deploy baru dari GitHub, lengkap dengan animasi progres penerapan dan ringkasan perubahan.',
-      'Kapasitas unggah dokumen sertifikat PDF ditingkatkan hingga 1 GB dengan pemuatan streaming hemat memori serta arsip .upnvjdats v2 tanpa batas string.',
-      'Pemantau sisa penyimpanan perangkat (Storage Manager API) beserta saran batas maksimal GB yang aman disimpan dan opsi Penyimpanan Persisten.',
       'Format arsip backup resmi .upnvjdats dengan verifikasi integritas CRC32 streaming yang kompatibel saat dipulihkan di perangkat apa pun.',
       'Panel Riwayat Pembaruan menampilkan kapan aplikasi terakhir diperbarui, kode commit, serta daftar fitur yang sudah diimplementasikan.',
       'Penambahan menu Jadwal Kuliah S1 Akuntansi, Kalender UPNVJ 2026/2027, dan Planner Mhs Akuntansi di halaman Telusuri Cepat.',

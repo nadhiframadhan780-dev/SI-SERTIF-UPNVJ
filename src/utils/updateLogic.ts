@@ -1,4 +1,4 @@
-import type { AppBuildInfo } from '../types/update';
+import type { AppBuildInfo, ReleaseNote } from '../types/update';
 import { APP_VERSION } from '../data/changelog';
 
 export function getLocalBuildInfo(): AppBuildInfo {
@@ -21,6 +21,9 @@ export function getLocalBuildInfo(): AppBuildInfo {
           recentCommits: Array.isArray(parsed.recentCommits)
             ? parsed.recentCommits
             : [],
+          releases: Array.isArray(parsed.releases)
+            ? parsed.releases
+            : undefined,
         };
       }
     }
@@ -60,6 +63,59 @@ export function formatIndonesianDateTime(isoString: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(parsed);
+}
+
+export function formatIndonesianReleaseDate(
+  isoString: string,
+  fallback = '-'
+): string {
+  if (!isoString) return fallback;
+  const parsed = new Date(isoString);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+
+  return new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed);
+}
+
+export function resolveDisplayReleases(params: {
+  remoteInfo: AppBuildInfo | null;
+  localInfo: AppBuildInfo;
+  fallbackReleases: ReleaseNote[];
+  activeBuiltAt?: string;
+  activeVersion?: string;
+}): ReleaseNote[] {
+  const sourceReleases =
+    params.remoteInfo?.releases && params.remoteInfo.releases.length > 0
+      ? params.remoteInfo.releases
+      : params.localInfo.releases && params.localInfo.releases.length > 0
+      ? params.localInfo.releases
+      : params.fallbackReleases;
+
+  if (sourceReleases.length === 0) return [];
+
+  const liveDateIso =
+    params.activeBuiltAt ||
+    params.remoteInfo?.builtAt ||
+    params.localInfo.builtAt;
+  const liveVersion =
+    params.activeVersion ||
+    params.remoteInfo?.version ||
+    params.localInfo.version ||
+    sourceReleases[0].version;
+
+  return sourceReleases.map((release, index) => {
+    if (index !== 0) return release;
+    return {
+      ...release,
+      version: liveVersion || release.version,
+      dateLabel: formatIndonesianReleaseDate(liveDateIso, release.dateLabel),
+    };
+  });
 }
 
 export function isValidBuildManifest(

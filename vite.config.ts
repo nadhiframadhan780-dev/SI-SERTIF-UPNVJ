@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { APP_RELEASES, APP_VERSION } from './src/data/changelog';
 
 function runGit(command: string): string {
   try {
@@ -18,7 +19,7 @@ function runGit(command: string): string {
 }
 
 function collectBuildMetadata() {
-  let version = '1.4.0';
+  let version = APP_VERSION;
   try {
     const pkg = JSON.parse(
       fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')
@@ -65,6 +66,7 @@ function collectBuildMetadata() {
     commitMessage,
     builtAt,
     recentCommits,
+    releases: APP_RELEASES,
   };
 }
 
@@ -117,7 +119,7 @@ export default defineConfig(() => {
       tailwindcss(),
       siSertifVersionPlugin(buildInfo),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         includeAssets: [
           'favicon.png',
           'logo.png',
